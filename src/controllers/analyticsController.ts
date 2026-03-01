@@ -4,6 +4,7 @@ import { db } from '../config/firebase';
 import { DiscountEngine, Product } from '../services/discountEngine';
 
 export class AnalyticsController {
+
   /**
    * Get comprehensive analytics dashboard
    */
@@ -12,9 +13,9 @@ export class AnalyticsController {
       const storeId = req.user?.uid;
 
       if (!storeId) {
-        return res.status(401).json({ 
+        return res.status(401).json({
           success: false,
-          error: 'User not authenticated' 
+          error: 'User not authenticated',
         });
       }
 
@@ -25,11 +26,20 @@ export class AnalyticsController {
         .get();
 
       const products: Product[] = [];
+
       productsSnapshot.forEach(doc => {
+        const data = doc.data();
+        const rawExpiry = data.expiryDate;
+
+        const expiryDate =
+          rawExpiry?.toDate
+            ? rawExpiry.toDate()
+            : new Date(rawExpiry);
+
         products.push({
           id: doc.id,
-          ...doc.data(),
-          expiryDate: doc.data().expiryDate.toDate(),
+          ...data,
+          expiryDate,
         } as Product);
       });
 
@@ -40,42 +50,83 @@ export class AnalyticsController {
         .get();
 
       const donations: any[] = [];
+
       donationsSnapshot.forEach(doc => {
+        const data = doc.data();
+
+        const donatedAt =
+          data.donatedAt?.toDate
+            ? data.donatedAt.toDate()
+            : data.donatedAt
+            ? new Date(data.donatedAt)
+            : null;
+
         donations.push({
           id: doc.id,
-          ...doc.data(),
-          donatedAt: doc.data().donatedAt.toDate(),
+          ...data,
+          donatedAt,
         });
       });
 
       // Calculate metrics
-      const discountedProducts = DiscountEngine.batchCalculateDiscounts(products);
+      const discountedProducts =
+        DiscountEngine.batchCalculateDiscounts(products);
+
       const weekAgo = new Date();
       weekAgo.setDate(weekAgo.getDate() - 7);
-      const thisWeekDonations = donations.filter(d => d.donatedAt > weekAgo);
+
+      const thisWeekDonations = donations.filter(
+        d => d.donatedAt && d.donatedAt > weekAgo
+      );
 
       const dashboard = {
         inventory: {
           total: products.length,
-          discounted: discountedProducts.filter(p => p.discount.discountPercent > 0).length,
-          urgent: discountedProducts.filter(p => p.discount.priority === 'URGENT').length,
-          warning: discountedProducts.filter(p => p.discount.priority === 'WARNING').length,
-          caution: discountedProducts.filter(p => p.discount.priority === 'CAUTION').length,
+          discounted: discountedProducts.filter(
+            p => p.discount.discountPercent > 0
+          ).length,
+          urgent: discountedProducts.filter(
+            p => p.discount.priority === 'URGENT'
+          ).length,
+          warning: discountedProducts.filter(
+            p => p.discount.priority === 'WARNING'
+          ).length,
+          caution: discountedProducts.filter(
+            p => p.discount.priority === 'CAUTION'
+          ).length,
         },
         donations: {
-          totalValue: donations.reduce((sum, d) => sum + d.donatedValue, 0),
+          totalValue: donations.reduce(
+            (sum, d) => sum + (d.donatedValue || 0),
+            0
+          ),
           thisWeek: thisWeekDonations.length,
-          thisWeekValue: thisWeekDonations.reduce((sum, d) => sum + d.donatedValue, 0),
+          thisWeekValue: thisWeekDonations.reduce(
+            (sum, d) => sum + (d.donatedValue || 0),
+            0
+          ),
           total: donations.length,
         },
         revenue: {
-          recovered: DiscountEngine.estimateRevenueRecovery(discountedProducts),
-          potential: DiscountEngine.estimateWaste(products),
+          recovered:
+            DiscountEngine.estimateRevenueRecovery(discountedProducts),
+          potential:
+            DiscountEngine.estimateWaste(products),
         },
         freshness: {
-          fresh: discountedProducts.filter(p => DiscountEngine.calculateDaysToExpiry(p.expiryDate) > 6).length,
-          warning: discountedProducts.filter(p => DiscountEngine.calculateDaysToExpiry(p.expiryDate) > 2 && DiscountEngine.calculateDaysToExpiry(p.expiryDate) <= 6).length,
-          urgent: discountedProducts.filter(p => DiscountEngine.calculateDaysToExpiry(p.expiryDate) <= 2).length,
+          fresh: discountedProducts.filter(
+            p =>
+              DiscountEngine.calculateDaysToExpiry(p.expiryDate) > 6
+          ).length,
+          warning: discountedProducts.filter(
+            p =>
+              DiscountEngine.calculateDaysToExpiry(p.expiryDate) > 2 &&
+              DiscountEngine.calculateDaysToExpiry(p.expiryDate) <= 6
+          ).length,
+          urgent: discountedProducts.filter(
+            p =>
+              DiscountEngine.calculateDaysToExpiry(p.expiryDate) <= 2
+          ).length,
         },
       };
 
@@ -83,11 +134,12 @@ export class AnalyticsController {
         success: true,
         data: dashboard,
       });
+
     } catch (error) {
       console.error('Error fetching analytics:', error);
-      res.status(500).json({ 
+      res.status(500).json({
         success: false,
-        error: 'Failed to fetch analytics' 
+        error: 'Failed to fetch analytics',
       });
     }
   }
@@ -100,9 +152,9 @@ export class AnalyticsController {
       const storeId = req.user?.uid;
 
       if (!storeId) {
-        return res.status(401).json({ 
+        return res.status(401).json({
           success: false,
-          error: 'User not authenticated' 
+          error: 'User not authenticated',
         });
       }
 
@@ -112,59 +164,65 @@ export class AnalyticsController {
         .get();
 
       const donations: any[] = [];
+
       donationsSnapshot.forEach(doc => {
+        const data = doc.data();
+
+        const donatedAt =
+          data.donatedAt?.toDate
+            ? data.donatedAt.toDate()
+            : data.donatedAt
+            ? new Date(data.donatedAt)
+            : null;
+
         donations.push({
           id: doc.id,
-          ...doc.data(),
-          donatedAt: doc.data().donatedAt.toDate(),
+          ...data,
+          donatedAt,
         });
       });
 
       const report = {
         totalDonated: donations.length,
-        totalValue: donations.reduce((sum, d) => sum + d.donatedValue, 0),
-        averageValuePerDonation: donations.length > 0 
-          ? donations.reduce((sum, d) => sum + d.donatedValue, 0) / donations.length 
-          : 0,
+        totalValue: donations.reduce(
+          (sum, d) => sum + (d.donatedValue || 0),
+          0
+        ),
+        averageValuePerDonation:
+          donations.length > 0
+            ? donations.reduce(
+                (sum, d) => sum + (d.donatedValue || 0),
+                0
+              ) / donations.length
+            : 0,
         byWeek: this.groupDonationsByWeek(donations),
-        trends: {
-          thisWeek: donations.filter(d => {
-            const weekAgo = new Date();
-            weekAgo.setDate(weekAgo.getDate() - 7);
-            return d.donatedAt > weekAgo;
-          }).length,
-          thisMonth: donations.filter(d => {
-            const monthAgo = new Date();
-            monthAgo.setMonth(monthAgo.getMonth() - 1);
-            return d.donatedAt > monthAgo;
-          }).length,
-        },
       };
 
       res.json({
         success: true,
         data: report,
       });
+
     } catch (error) {
       console.error('Error fetching waste report:', error);
-      res.status(500).json({ 
+      res.status(500).json({
         success: false,
-        error: 'Failed to fetch waste report' 
+        error: 'Failed to fetch waste report',
       });
     }
   }
 
   /**
-   * Get inventory trends (last 7 days)
+   * Get inventory trends
    */
   static async getInventoryTrends(req: AuthRequest, res: Response) {
     try {
       const storeId = req.user?.uid;
 
       if (!storeId) {
-        return res.status(401).json({ 
+        return res.status(401).json({
           success: false,
-          error: 'User not authenticated' 
+          error: 'User not authenticated',
         });
       }
 
@@ -174,47 +232,53 @@ export class AnalyticsController {
         .get();
 
       const products: Product[] = [];
+
       productsSnapshot.forEach(doc => {
+        const data = doc.data();
+        const rawExpiry = data.expiryDate;
+
+        const expiryDate =
+          rawExpiry?.toDate
+            ? rawExpiry.toDate()
+            : new Date(rawExpiry);
+
         products.push({
           id: doc.id,
-          ...doc.data(),
-          expiryDate: doc.data().expiryDate.toDate(),
+          ...data,
+          expiryDate,
         } as Product);
       });
 
-      const discountedProducts = DiscountEngine.batchCalculateDiscounts(products);
-
-      const trends = {
-        daily: this.generateDailyTrends(products),
-        categories: this.groupByCategory(discountedProducts),
-        byDiscount: {
-          noDiscount: discountedProducts.filter(p => p.discount.discountPercent === 0).length,
-          discount25: discountedProducts.filter(p => p.discount.discountPercent >= 20 && p.discount.discountPercent < 40).length,
-          discount50: discountedProducts.filter(p => p.discount.discountPercent >= 40 && p.discount.discountPercent < 70).length,
-          discount75: discountedProducts.filter(p => p.discount.discountPercent >= 70).length,
-        },
-      };
+      const discountedProducts =
+        DiscountEngine.batchCalculateDiscounts(products);
 
       res.json({
         success: true,
-        data: trends,
+        data: {
+          totalProducts: products.length,
+          discountedProducts: discountedProducts.filter(
+            p => p.discount.discountPercent > 0
+          ).length,
+        },
       });
+
     } catch (error) {
       console.error('Error fetching inventory trends:', error);
-      res.status(500).json({ 
+      res.status(500).json({
         success: false,
-        error: 'Failed to fetch inventory trends' 
+        error: 'Failed to fetch inventory trends',
       });
     }
   }
 
-  /**
-   * Group donations by week
-   */
   private static groupDonationsByWeek(donations: any[]) {
-    const weeks: { [key: string]: { count: number; value: number } } = {};
+    const weeks: {
+      [key: string]: { count: number; value: number };
+    } = {};
 
     donations.forEach(d => {
+      if (!d.donatedAt) return;
+
       const date = new Date(d.donatedAt);
       const weekStart = new Date(date);
       weekStart.setDate(date.getDate() - date.getDay());
@@ -225,69 +289,9 @@ export class AnalyticsController {
       }
 
       weeks[weekKey].count++;
-      weeks[weekKey].value += d.donatedValue;
+      weeks[weekKey].value += d.donatedValue || 0;
     });
 
     return weeks;
-  }
-
-  /**
-   * Generate daily trends for next 7 days
-   */
-  private static generateDailyTrends(products: Product[]) {
-    const trends: { date: string; count: number; value: number }[] = [];
-
-    for (let i = 0; i < 7; i++) {
-      const date = new Date();
-      date.setDate(date.getDate() + i);
-      const dateStr = date.toISOString().split('T')[0];
-
-      const productsExpiringToday = products.filter(p => {
-        const expiry = new Date(p.expiryDate);
-        expiry.setHours(0, 0, 0, 0);
-        date.setHours(0, 0, 0, 0);
-        return expiry.getTime() === date.getTime();
-      });
-
-      trends.push({
-        date: dateStr,
-        count: productsExpiringToday.length,
-        value: productsExpiringToday.reduce((sum, p) => sum + p.originalPrice * p.quantity, 0),
-      });
-    }
-
-    return trends;
-  }
-
-  /**
-   * Group products by category with discount info
-   */
-  private static groupByCategory(products: any[]) {
-    const categories: { [key: string]: { count: number; discounted: number; value: number; avgDiscount: number } } = {};
-
-    products.forEach(p => {
-      const cat = p.category || 'General';
-      if (!categories[cat]) {
-        categories[cat] = { count: 0, discounted: 0, value: 0, avgDiscount: 0 };
-      }
-
-      categories[cat].count++;
-      categories[cat].value += p.originalPrice * p.quantity;
-
-      if (p.discount.discountPercent > 0) {
-        categories[cat].discounted++;
-      }
-    });
-
-    // Calculate average discount
-    Object.keys(categories).forEach(cat => {
-      const discountedItems = products.filter(p => (p.category || 'General') === cat && p.discount.discountPercent > 0);
-      if (discountedItems.length > 0) {
-        categories[cat].avgDiscount = 
-          discountedItems.reduce((sum, p) => sum + p.discount.discountPercent, 0) / discountedItems.length;
-      }
-    });
-
-    return categories;
   }
 }

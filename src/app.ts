@@ -17,10 +17,14 @@ dotenv.config();
 
 const app: Express = express();
 
-app.use(cors({
-  origin: env.REACT_APP_URL,
-  credentials: true,
-}));
+app.use(
+  cors({
+    origin: 'http://localhost:5173',
+    methods: ['GET', 'POST', 'PATCH', 'DELETE'],
+    credentials: true,
+  })
+);
+
 app.use(bodyParser.json({ limit: '10kb' }));
 app.use(bodyParser.urlencoded({ limit: '10kb', extended: true }));
 
@@ -48,10 +52,5 @@ app.use((req: Request, res: Response) => {
 app.use(errorHandler);
 
 const PORT = env.PORT;
-app.listen(PORT, () => {
-  console.log(`✅ FoodLoop Backend running on port ${PORT}`);
-  console.log(`🔗 API: http://localhost:${PORT}/api`);
-  console.log(`📊 Health: http://localhost:${PORT}/health`);
-});
 
 export default app;
